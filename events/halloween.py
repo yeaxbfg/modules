@@ -1,14 +1,14 @@
 import asyncio
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from assets.transform import transform_int as tr
-from decimal import Decimal
-from assets.antispam import antispam, antispam_earning, new_earning
-from bot import bot
 import time
-import sqlite3
 import random
+import sqlite3
+from decimal import Decimal
+from aiogram import F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
+from assets.transform import transform_int as tr
+from assets.antispam import antispam, antispam_earning, new_earning
+from bot import bot, dp
 from commands.db import conn as conngdb, cursor as cursorgdb
 from commands.main import CONFIG as HELLO_CONFIG
 from commands.help import CONFIG as HELP_CONFIG
@@ -16,24 +16,8 @@ from user import BFGuser
 
 atacktime = dict()
 
-router = Router()
-
-async def atack_time(user_id: int, utime=60) -> tuple:
-    current_time = int(time.time())
-    last_time = atacktime.get(user_id, 0)
-
-    delta_seconds = current_time - last_time
-    sl = int(utime - delta_seconds)
-
-    if sl > 0:
-        return 1, sl
-    else:
-        atacktime[user_id] = current_time
-        return 0, 0
-
-
 MONSTERS = [
-    ('ВІДЬМА', 500, 'https://img.freepik.com/premium-photo/scary-halloween-witch-with-pumpkin-smoke-dark-background_924727-4391.jpg'),
+    ('ВЕДЬМА', 500, 'https://img.freepik.com/premium-photo/scary-halloween-witch-with-pumpkin-smoke-dark-background_924727-4391.jpg'),
     ('ОБОРОТЕНЬ', 350, 'https://img1.akspic.ru/crops/8/8/6/3/4/143688/143688-uzhas-art-illustracia-psovye-vampir-1920x1080.jpg'),
     ('ЗЛАЯ ТЫКВА', 150, 'https://img.goodfon.ru/original/1920x1408/7/36/halloween-evil-pumpkins-bats-4911.jpg'),
     ('ПРИЗРАК', 750, 'https://png.pngtree.com/thumb_back/fw800/background/20230611/pngtree-halloween-ghost-wallpaper-4k-5k-image_2927454.jpg'),
@@ -42,7 +26,6 @@ MONSTERS = [
 ]
 
 MONSTER = {'name': '', 'hp': 0, 'time': 0, 'url': '', 'max_hp': 0}
-
 
 class Database:
     def __init__(self):
@@ -98,6 +81,7 @@ class Database:
         cursorgdb.execute('UPDATE users SET ecoins = ecoins + ? WHERE user_id = ?', (summ, user_id))
         conngdb.commit()
 
+db = Database()
 
 def edit_halloween_message():
     HELLO_CONFIG['sticker_id'] = [
@@ -112,7 +96,19 @@ def edit_halloween_message():
     HELLO_CONFIG['hello_text2'] = HELLO_CONFIG['hello_text2'].replace('🚀', '😈')
     HELP_CONFIG['help_cmd'] = HELP_CONFIG['help_cmd'].replace('💬', '👽')
     HELP_CONFIG['help_game'] += '\n   👻 Джекпот'
-    
+
+async def atack_time(user_id: int, utime=60) -> tuple:
+    current_time = int(time.time())
+    last_time = atacktime.get(user_id, 0)
+
+    delta_seconds = current_time - last_time
+    sl = int(utime - delta_seconds)
+
+    if sl > 0:
+        return 1, sl
+    else:
+        atacktime[user_id] = current_time
+        return 0, 0
 
 def new_monster() -> None:
     global MONSTER
@@ -126,16 +122,11 @@ def new_monster() -> None:
     ntime = int(time.time()) + 3600
     MONSTER = {'name': new_monster[0], 'hp': new_monster[1], 'time': ntime, 'url': new_monster[2], 'max_hp': new_monster[1]}
 
-
-db = Database()
-new_monster()
-
-
 def atack_kb() -> InlineKeyboardMarkup:
-    keyboards = InlineKeyboardMarkup(row_width=1)
-    keyboards.add(InlineKeyboardButton("🔫 Атаковать", callback_data="event-monster-atack"))
+    keyboards = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔫 Атаковать", callback_data="event-monster-atack")]
+    ])
     return keyboards
-
 
 def format_time(seconds: int) -> str:
     seconds = seconds - int(time.time())
@@ -154,20 +145,18 @@ def format_time(seconds: int) -> str:
     else:
         return pluralize(seconds, "секунда", "секунды", "секунд")
     
-    
 async def check_monster() -> None:
     if time.time() > MONSTER['time'] or MONSTER['hp'] <= 0:
         new_monster()
-    
 
-@router.message(F.text.lower() == 'мешок')
+# Обработчики сообщений
+@dp.message(F.text.lower() == 'мешок')
 @antispam
 async def bag(message: Message, user: BFGuser):
     data = await db.get_balance(user.user_id)
     await message.answer(f'{user.url}, в вашем мешочке:\n🍬 Конфеты: {data[1]}\n🎃 Тыквы: {data[3]}\n🎭 Маски: {data[2]}')
-    
 
-@router.message(F.text.lower() == 'монстр')
+@dp.message(F.text.lower() == 'монстр')
 @antispam
 async def monster(message: Message, user: BFGuser):
     await check_monster()
@@ -176,9 +165,8 @@ async def monster(message: Message, user: BFGuser):
 ⌛️ До смены монстра: {format_time(MONSTER['time'])}'''
     msg = await bot.send_photo(message.chat.id, photo=MONSTER['url'], caption=txt, reply_markup=atack_kb())
     await new_earning(msg)
-    
 
-@router.callback_query(F.data == 'event-monster-atack')
+@dp.callback_query(F.data == 'event-monster-atack')
 @antispam_earning
 async def atack(call: CallbackQuery, user: BFGuser):
     status, stime = await atack_time(user.user_id)
@@ -205,9 +193,8 @@ async def atack(call: CallbackQuery, user: BFGuser):
             txt = f', +{candy}🍬'
             
         await call.message.answer(f'{user.name}, вы нанесли удар по монстру!\n-{hp}❤️{txt}')
-        
-        
-@router.message(F.text.lower() == 'напугать')
+
+@dp.message(F.text.lower() == 'напугать')
 @antispam
 async def startle(message: Message, user: BFGuser):
     info = await db.get_balance(user.user_id)
@@ -252,9 +239,8 @@ async def startle(message: Message, user: BFGuser):
     
     await message.answer(msg.format(user.url), reply_to_message_id=message.reply_to_message.message_id)
     await db.upd_mask(user.user_id, -1)
-    
-    
-@router.message(F.text.lower() == 'магазин')
+
+@dp.message(F.text.lower() == 'магазин')
 @antispam
 async def shop(message: Message, user: BFGuser):
     await message.answer(f'''{user.url}, добро пожаловать в наш магазин:
@@ -266,8 +252,7 @@ async def shop(message: Message, user: BFGuser):
 Купить маску (кол-во)
 Открыть конфеты (кол-во)''')
 
-
-@router.message(F.text.lower().startswith(('купить маску', 'открыть конфеты')))
+@dp.message(F.text.lower().startswith(('купить маску', 'открыть конфеты')))
 @antispam
 async def buy(message: Message, user: BFGuser):
     info = await db.get_balance(user.user_id)
@@ -299,8 +284,7 @@ async def buy(message: Message, user: BFGuser):
         await db.upd_money(user.user_id, summ2)
         await message.answer(f'{user.url}, вы успешно обменяли {summ}🍬 на {tr(summ2)}$ 👻')
 
-
-@router.message(F.text.lower() == 'джекпот')
+@dp.message(F.text.lower() == 'джекпот')
 @antispam
 async def jackpot(message: Message, user: BFGuser):
     info = await db.get_balance(user.user_id)
@@ -353,13 +337,12 @@ async def jackpot(message: Message, user: BFGuser):
         await msg.edit_text(f"{user.url}, {'|'.join(emojis)}\n<i>{txt}</i>")
     except:
         await message.reply(f"{user.url}, {'|'.join(emojis)}\n<i>{txt}</i>")
-    
-    
-@router.message(F.text.lower() == 'хэллоуин')
+
+@dp.message(F.text.lower() == 'хэллоуин')
 @antispam
 async def event(message: Message, user: BFGuser):
     await message.answer(f'''<b>Ивент Хэллоуин 🎃</b>
-<i>Добро пожаловать на Хэллоуинское событие! Жуткие приключения ждут вас, и каждый участник сможет проявить себя в различных конкурсах и заданиях. Мы подготовили крутые призы, которые можно выиграть!</i>
+<i>Добро пожаловать на Хэллоуинское событие! Жуткие приключения ждут вас, и каждый участник сможет проявить себя в различных конкурсы и заданиях. Мы подготовили крутые призы, которые можно выиграть!</i>
 
 <b>Основные задания:</b>
 
@@ -375,11 +358,15 @@ async def event(message: Message, user: BFGuser):
 👻 <b>Возможность пугать игроков</b> (<code>Напугать</code>)
 Используйте страшные маски, чтобы пугать других игроков и зарабатывать дополнительные бонусы!''')
 
-
+# Функция для регистрации обработчиков (нужна для module_manager)
 def register_handlers(dp):
-    dp.include_router(router)
+    """Функция для инициализации модуля"""
     edit_halloween_message()
+    new_monster()
 
+# Инициализация модуля при импорте
+edit_halloween_message()
+new_monster()
 
 MODULE_DESCRIPTION = {
     'name': '👻 Halloween',
