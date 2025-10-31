@@ -299,12 +299,8 @@ async def start_background_tasks():
     asyncio.create_task(check_game())
 
 
-def register_handlers():
-    """Функция для регистрации обработчиков"""
-    # Обработчики уже зарегистрированы через декораторы @dp
-    # Запускаем фоновые задачи
+def register_handlers(dp):
     asyncio.create_task(start_background_tasks())
-    print("✅ TicTacToe module loaded successfully!")
 
 
 # Автоматический запуск фоновых задач при импорте
