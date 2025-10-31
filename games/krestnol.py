@@ -293,17 +293,13 @@ async def check_game():
         await asyncio.sleep(30)
 
 
-# Запуск фоновых задач
 async def start_background_tasks():
     asyncio.create_task(check_waiting())
     asyncio.create_task(check_game())
 
-
 def register_handlers(dp):
     asyncio.create_task(start_background_tasks())
 
-
-# Автоматический запуск фоновых задач при импорте
 asyncio.create_task(start_background_tasks())
 
 MODULE_DESCRIPTION = {
