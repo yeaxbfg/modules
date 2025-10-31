@@ -26,7 +26,7 @@
     "halloween": {
       "name": "\uD83D\uDC7B Halloween",
       "description": "Ивент-модуль хэллоуин:\n- Новое оформление\n- Новый ивент \"монстры\"\n- Новая игра\n- Новые игровые валюты\n\n* Модуль использует собственную базу данных\n* Помощью по модулю введите \"хеллоуин\"",
-      "url": "https://raw.githubusercontent.com/Ijidishurka/bfg-modules/refs/heads/V3/events/halloween.py"
+      "url": "https://raw.githubusercontent.com/yeaxbfg/modules/refs/heads/main/events/halloween.py"
     },
      "wcalendar": {
       "name": "\uD83C\uDF85 Winter-calendar",
