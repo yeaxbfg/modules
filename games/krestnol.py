@@ -103,12 +103,15 @@ class Game:
         return None
     
     def get_kb(self):
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        # Исправленная версия для aiogram 3
+        inline_keyboard = []
         for i in range(3):
             row = []
             for j in range(3):
                 row.append(InlineKeyboardButton(text=self.board[i][j], callback_data=f"TicTacToe_{i}_{j}"))
-            keyboard.inline_keyboard.append(row)
+            inline_keyboard.append(row)
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
         return keyboard
 
     async def pay_money(self, user_id, summ):
@@ -293,13 +296,21 @@ async def check_game():
         await asyncio.sleep(30)
 
 
+# Запуск фоновых задач
 async def start_background_tasks():
     asyncio.create_task(check_waiting())
     asyncio.create_task(check_game())
 
-def register_handlers(dp):
-    asyncio.create_task(start_background_tasks())
 
+def register_handlers(dp):
+    """Функция для регистрации обработчиков"""
+    # Обработчики уже зарегистрированы через декораторы @dp
+    # Запускаем фоновые задачи
+    asyncio.create_task(start_background_tasks())
+    print("✅ TicTacToe module loaded successfully!")
+
+
+# Автоматический запуск фоновых задач при импорте
 asyncio.create_task(start_background_tasks())
 
 MODULE_DESCRIPTION = {
