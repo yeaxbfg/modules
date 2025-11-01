@@ -7,6 +7,7 @@ from decimal import Decimal
 import random
 import asyncio
 
+reg = register_handlers
 router = Router()
 DB_PATH = "users.db"
 
