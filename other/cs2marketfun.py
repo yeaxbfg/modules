@@ -1,5 +1,3 @@
-# /modules/skins_market.py
-
 from aiogram import Router, F
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, CallbackQuery
 from assets.antispam import antispam, antispam_earning, new_earning
@@ -7,9 +5,18 @@ from user import BFGuser
 import sqlite3
 from decimal import Decimal
 import random
+import asyncio
 
 router = Router()
 DB_PATH = "users.db"
+
+# ---------- Редкости и цвета ----------
+RARITY_EMOJI = {
+    "Common": "⬜",
+    "Rare": "🟦",
+    "Epic": "🟪",
+    "Legendary": "🟧"
+}
 
 # ---------- Настройка кейсов ----------
 CASES = [
@@ -37,7 +44,7 @@ CASES = [
     }
 ]
 
-# ---------- Создание таблиц, если их нет ----------
+# ---------- Создание таблиц ----------
 def create_tables():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -69,20 +76,20 @@ create_tables()
 @router.message(F.text == "Магазин кейсов")
 @antispam
 async def show_cases(message: Message, user: BFGuser):
-    text = "🎁 Доступные кейсы:\n"
+    text = "🎁 **Доступные кейсы:**\n"
     keyboard = InlineKeyboardMarkup()
     for i, case in enumerate(CASES):
         text += f"{case['name']} - {case['cost_balance']}💰 или {case['cost_ecoins']}🤑\n"
         keyboard.add(
-            InlineKeyboardButton(f"Открыть {case['name']}", callback_data=f"open_case|{i}|{user.user_id}")
+            InlineKeyboardButton(f"Открыть {case['name']}", callback_data=f"open_case_cs2|{i}|{user.user_id}")
         )
     msg = await message.answer(text, reply_markup=keyboard)
     await new_earning(msg)
 
-# ---------- Открытие кейса ----------
-@router.callback_query(F.data.startswith("open_case"))
+# ---------- Анимация открытия кейса ----------
+@router.callback_query(F.data.startswith("open_case_cs2"))
 @antispam_earning
-async def open_case(call: CallbackQuery, user: BFGuser):
+async def open_case_animated(call: CallbackQuery, user: BFGuser):
     _, case_index, user_id = call.data.split("|")
     case_index = int(case_index)
     case = CASES[case_index]
@@ -104,21 +111,32 @@ async def open_case(call: CallbackQuery, user: BFGuser):
         conn.close()
         return
 
-    # Рандомное выпадение скина
-    skin = random.choices(
-        population=[s for s in case['skins']],
-        weights=[s['chance'] for s in case['skins']],
-        k=1
-    )[0]
+    # Финальный скин
+    skins = [s for s in case['skins']]
+    weights = [s['chance'] for s in skins]
+    final_skin = random.choices(skins, weights=weights, k=1)[0]
 
+    msg = await call.message.answer("🔹 Вы открываете кейс...")
+    # Симуляция скролла
+    scroll_skins = random.choices(skins, k=7)
+    for s in scroll_skins:
+        await asyncio.sleep(0.5)
+        emoji = RARITY_EMOJI.get(s['rarity'], "⬜")
+        await msg.edit_text(f"🔹 Вы открываете кейс...\n{emoji} {s['name']} ({s['rarity']})")
+
+    await asyncio.sleep(1)
+    emoji_final = RARITY_EMOJI.get(final_skin['rarity'], "⬜")
+    await msg.edit_text(
+        f"🎉 **Поздравляем!**\nВы получили скин:\n{emoji_final} {final_skin['name']} ({final_skin['rarity']})\n💰 {final_skin['price']}"
+    )
+
+    # Добавление в инвентарь
     cursor.execute(
         "INSERT INTO skins_inventory (user_id, skin_name, rarity, price) VALUES (?, ?, ?, ?)",
-        (user.user_id, skin['name'], skin['rarity'], skin['price'])
+        (user.user_id, final_skin['name'], final_skin['rarity'], final_skin['price'])
     )
     conn.commit()
     conn.close()
-
-    await call.message.answer(f"🎉 Вы открыли {case['name']} и получили скин: {skin['name']} ({skin['rarity']}) стоимостью {skin['price']}💰!")
 
 # ---------- Инвентарь ----------
 @router.message(F.text == "Мой инвентарь")
@@ -134,18 +152,19 @@ async def show_inventory(message: Message, user: BFGuser):
         await message.answer("Ваш инвентарь пуст 😢")
         return
 
-    text = "Ваш инвентарь:\n"
+    text = "🎒 **Ваш инвентарь:**\n"
     keyboard = InlineKeyboardMarkup()
     for skin in skins:
         skin_id, name, rarity, price = skin
-        text += f"{name} ({rarity}) - {price}💰\n"
+        emoji = RARITY_EMOJI.get(rarity, "⬜")
+        text += f"{emoji} {name} ({rarity}) - {price}💰\n"
         keyboard.add(
             InlineKeyboardButton(f"Продать {name}", callback_data=f"sell_skin|{skin_id}|{user.user_id}")
         )
     msg = await message.answer(text, reply_markup=keyboard)
     await new_earning(msg)
 
-# ---------- Продажа скина на маркет ----------
+# ---------- Продажа и маркет ----------
 @router.callback_query(F.data.startswith("sell_skin"))
 @antispam_earning
 async def sell_skin(call: CallbackQuery, user: BFGuser):
@@ -170,7 +189,6 @@ async def sell_skin(call: CallbackQuery, user: BFGuser):
     conn.close()
     await call.message.answer(f"Вы выставили {skin_name} на маркет за {price}💰!")
 
-# ---------- Просмотр маркета ----------
 @router.message(F.text == "Маркет")
 @antispam
 async def show_market(message: Message, user: BFGuser):
@@ -184,7 +202,7 @@ async def show_market(message: Message, user: BFGuser):
         await message.answer("Маркет пуст 😢")
         return
 
-    text = "Скины на продаже:\n"
+    text = "🛒 **Скины на продаже:**\n"
     keyboard = InlineKeyboardMarkup()
     for s in skins:
         market_id, seller_id, name, price = s
@@ -195,7 +213,6 @@ async def show_market(message: Message, user: BFGuser):
     msg = await message.answer(text, reply_markup=keyboard)
     await new_earning(msg)
 
-# ---------- Покупка скина ----------
 @router.callback_query(F.data.startswith("buy_skin"))
 @antispam_earning
 async def buy_skin(call: CallbackQuery, user: BFGuser):
@@ -218,7 +235,7 @@ async def buy_skin(call: CallbackQuery, user: BFGuser):
         conn.close()
         return
 
-    # Списание с покупателя и зачисление продавцу
+    # Перевод денег
     new_balance = balance - price
     cursor.execute("UPDATE users SET balance = ? WHERE user_id = ?", (f"{new_balance:.0f}", user.user_id))
     cursor.execute("SELECT balance FROM users WHERE user_id = ?", (seller_id,))
@@ -241,6 +258,6 @@ def register_handlers(dp):
     dp.include_router(router)
 
 MODULE_DESCRIPTION = {
-    'name': '🎮 Расширенные кейсы и маркет скинов',
-    'description': 'Кейсы с редкостью, инвентарь и маркет для продажи/покупки скинов между игроками'
+    'name': '🎮 Кейсы CS2 с анимацией и маркет',
+    'description': 'Кейс с анимацией, инвентарь и маркет для продажи/покупки скинов между игроками'
 }
