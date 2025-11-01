@@ -55,8 +55,8 @@
       "name": "\uD83D\uDDBC Система аватарок",
       "description": "Система аватарок\\nДобавлена команда \"ава\"\\nДля настройки админ чата отправьте /set_avatar_chat в админ чат",
       "url": "https://raw.githubusercontent.com/Ijidishurka/bfg-modules/refs/heads/main/other/avatar.py"
-    }
-    "craft": {
+    },
+    "market": {
       "name": "⛓️\u200D\uD83D\uDCA5 Маркет",
       "description": "Добавляет маркет.",
       "url": "    https://raw.githubusercontent.com/yeaxbfg/modules/refs/heads/main/other/cs2marketfun.py"
