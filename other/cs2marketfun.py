@@ -1,6 +1,5 @@
-
 import asyncio
-from aiogram import Router, F
+from aiogram import Router, F, Dispatcher
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from assets.transform import transform_int as tr
 from decimal import Decimal
@@ -16,6 +15,7 @@ from commands.main import CONFIG as HELLO_CONFIG
 from commands.help import CONFIG as HELP_CONFIG
 from user import BFGuser
 
+# Создаем router
 router = Router()
 
 # Редкости как в CS:GO
@@ -436,6 +436,7 @@ def market_kb():
     keyboards.add(InlineKeyboardButton("🎒 Мой инвентарь", callback_data="inventory"))
     return keyboards
 
+# ОБРАБОТЧИКИ КОМАНД - ИСПРАВЛЕННЫЕ
 @router.message(F.text.lower() == 'кейсы')
 @antispam
 async def cases_menu(message: Message, user: BFGuser):
@@ -562,6 +563,7 @@ async def show_inventory(call: CallbackQuery, user: BFGuser):
     
     await call.message.answer(text, reply_markup=cases_kb())
 
+# ВАЖНО: Используем F.text для текстовых команд вместо лямбда-функций
 @router.message(F.text.lower().startswith('продать '))
 @antispam
 async def sell_item(message: Message, user: BFGuser):
@@ -600,7 +602,6 @@ async def sell_item(message: Message, user: BFGuser):
         await message.answer('❌ Ошибка при выставлении предмета на маркет')
 
 @router.message(F.text.lower() == 'маркет')
-@router.callback_query(F.data == 'market')
 @antispam
 async def market_menu(message: Message, user: BFGuser):
     if not db:
@@ -620,10 +621,7 @@ async def market_menu(message: Message, user: BFGuser):
 Для продажи предмета из инвентаря:
 <code>продать [ID] [цена]</code>'''
     
-    if isinstance(message, CallbackQuery):
-        await message.message.answer(text, reply_markup=market_kb())
-    else:
-        await message.answer(text, reply_markup=market_kb())
+    await message.answer(text, reply_markup=market_kb())
 
 @router.callback_query(F.data.startswith('market_'))
 @antispam_earning
@@ -728,8 +726,15 @@ async def top_cases(message: Message, user: BFGuser):
     
     await message.answer(text)
 
-def register_handlers(dp):
+# ВАЖНО: Добавляем обработчики для текстовых команд которые могут быть пропущены
+@router.message(F.text.lower().in_(['cs2', 'кейс', 'маркетплейс', 'скины']))
+@antispam
+async def cs2_redirect(message: Message, user: BFGuser):
+    await cases_menu(message, user)
+
+def register_handlers(dp: Dispatcher):
     dp.include_router(router)
+    print("✅ CS2 Market handlers registered")
 
 MODULE_DESCRIPTION = {
     'name': '🎮 CS2 Market',
