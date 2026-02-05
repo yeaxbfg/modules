@@ -3,12 +3,12 @@ import random
 import time
 from decimal import Decimal
 
-from aiogram import F
+from aiogram import Dispatcher, F, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from assets.antispam import antispam, antispam_earning, new_earning
 from assets.transform import transform_int as tr
-from bot import bot, dp
+from bot import bot
 from commands.db import conn, cursor, url_name
 from commands.help import CONFIG
 from user import BFGuser, BFGconst
@@ -139,127 +139,9 @@ def find_game_by_userid(user_id):
     return None
 
 
-@dp.message(F.text.lower().startswith('кн'))
-@antispam
-async def start(message: Message, user: BFGuser):
-    win, lose = BFGconst.emj()
-    
-    if message.chat.type != 'supergroup':
-        return
-    
-    if find_game_by_userid(user.user_id):
-        await message.answer(f'{user.url}, у вас уже есть активная игра {lose}')
-        return
-        
-    try:
-        if message.text.lower().split()[1] in ['все', 'всё']:
-            summ = int(user.balance)
-        else:
-            summ = message.text.split()[1].replace('е', 'e')
-            summ = int(float(summ))
-    except:
-        await message.answer(f'{user.url}, вы не ввели ставку для игры 🫤')
-        return
-    
-    if summ < 10:
-        await message.answer(f'{user.url}, минимальная ставка - 10$ {lose}')
-        return
-    
-    if summ > int(user.balance):
-        await message.answer(f'{user.url}, у вас недостаточно денег {lose}')
-        return
-    
-    msg = await message.answer(f"❌⭕️ {user.url} хочет сыграть в крестики-нолики\n💰 Ставка: {tr(summ)}$\n⏳ <i>Ожидаю противника в течении 3х минут</i>", reply_markup=creat_start_kb())
-    game = Game(msg.chat.id, user.user_id, summ, msg.message_id)
-    await new_earning(msg)
-    await update_balance(user.user_id, summ, operation='subtract')
-    waiting[game] = int(time.time()) + 180
-    
-
-@dp.callback_query(F.data == "tictactoe-start")
-@antispam_earning
-async def start_game_kb(call: CallbackQuery, user: BFGuser):
-    game = find_waiting(call.message.chat.id, call.message.message_id)
-    
-    if not game or user.user_id == game.user_id:
-        return
-    
-    if int(user.balance) < game.summ:
-        await call.answer('❌ У вас недостаточно денег.', show_alert=True)
-        return
-    
-    games.append(game)
-    waiting.pop(game)
-    
-    game.r_id = user.user_id
-    game.start()
-    
-    cross = await url_name(game.chips['cross'])
-    zero = await url_name(game.chips['zero'])
-    
-    crossp, zerop = ('ᅠ ', '👉') if game.move == 'zero' else ('👉', 'ᅠ ')
-    
-    text = f'''<b>Игра крестики-нолики</b>
-💰 Ставка: {tr(game.summ)}$
-
-{crossp}❌ {cross}
-{zerop}⭕️ {zero}'''
-    
-    await call.message.edit_text(text, reply_markup=game.get_kb())
-    await update_balance(user.user_id, game.summ, operation='subtract')
-
-
-@dp.callback_query(F.data.startswith("TicTacToe_"))
-@antispam_earning
-async def game_kb(call: CallbackQuery, user: BFGuser):
-    game = find_game_by_mid(call.message.chat.id, call.message.message_id)
-    
-    if not game:
-        return
-    
-    if game.r_id != user.user_id and game.user_id != user.user_id:
-        await call.answer('💩 Вы не можете нажать на эту кнопку.', show_alert=True)
-        return
-    
-    if game.get_user_chips(user.user_id) != game.move:
-        await call.answer('❌ Не ваш ход.', show_alert=True)
-        return
-    
-    x = int(call.data.split('_')[1])
-    y = int(call.data.split('_')[2])
-    result = game.make_move(x, y, user.user_id)
-    
-    if result == 'not empty':
-        await call.answer('❌ Эта клетка уже занята.', show_alert=True)
-        return
-    
-    cross = await url_name(game.chips['cross'])
-    zero = await url_name(game.chips['zero'])
-    
-    crossp, zerop = ('ᅠ ', '👉') if game.move == 'zero' else ('👉', 'ᅠ ')
-    
-    text = f'''<b>Игра крестики-нолики</b>
-💰 Ставка: {tr(game.summ)}$
-
-{crossp}❌ {cross}
-{zerop}⭕️ {zero}'''
-    
-    await call.message.edit_text(text, reply_markup=game.get_kb())
-    
-    result = game.check_winner()
-    if result:
-        if result == 'draw':
-            await call.message.answer(f'🥸 У вас ничья!\n<i>Деньги возвращены.</i>', reply_to_message_id=game.message_id)
-            await update_balance(game.user_id, game.summ, operation='add')
-            await update_balance(game.r_id, game.summ, operation='add')
-        else:
-            move = 'zero' if result == '⭕️' else 'cross'
-            win = game.chips[move]
-            win_name = await url_name(win)
-            await call.message.answer(f'🎊 {win_name} поздравляем с победой!\n<i>💰 Приз: {tr(game.summ*2)}$</i>', reply_to_message_id=game.message_id)
-            await update_balance(win, (game.summ*2), operation='add')
-        
-        games.remove(game)
+    router.message.register(start, F.text.lower().startswith('кн')) # Используем F.text.lower().startswith()
+    router.callback_query.register(start_game_kb, F.data == "tictactoe-start")
+    router.callback_query.register(game_kb, F.data.startswith("TicTacToe_"))
 
 
 async def check_waiting():
@@ -302,16 +184,15 @@ async def start_background_tasks():
     asyncio.create_task(check_game())
 
 
-def register_handlers(dp):
+def register_handlers(dp: Dispatcher):
+    router = Router()
     """Функция для регистрации обработчиков"""
-    # Обработчики уже зарегистрированы через декораторы @dp
-    # Запускаем фоновые задачи
-    asyncio.create_task(start_background_tasks())
+    dp.include_router(router)
+    dp.startup.register(start_background_tasks)
     print("✅ TicTacToe module loaded successfully!")
 
 
 # Автоматический запуск фоновых задач при импорте
-asyncio.create_task(start_background_tasks())
 
 MODULE_DESCRIPTION = {
     'name': '❌⭕️ Крестики-нолики',
