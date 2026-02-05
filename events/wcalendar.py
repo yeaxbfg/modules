@@ -1,8 +1,11 @@
 import asyncio
 
 from aiogram import types
-from aiogram.dispatcher import Dispatcher, FSMContext
-from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram import Dispatcher, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.filters import Command
+from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from assets.transform import transform_int as tr
 from assets.antispam import antispam, antispam_earning, new_earning, admin_only
@@ -141,30 +144,25 @@ db = Database()
 
 
 def get_prize_kb() -> InlineKeyboardMarkup:
-	keyboards = InlineKeyboardMarkup(row_width=1)
-	keyboards.add(InlineKeyboardButton("🎁 Получить", callback_data="winter-event-get-prize"))
+	keyboards = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎁 Получить", callback_data="winter-event-get-prize")]])
 	return keyboards
 
 
 def info_prizes_kb(data, lday, user_id) -> InlineKeyboardMarkup:
-	keyboards = InlineKeyboardMarkup(row_width=1)
-	
+	buttons = []
 	for day, i in data.items():
 		txt = '📍 |' if day == lday else ''
-		keyboards.add(InlineKeyboardButton(f"{txt} {tr(i[1])} {i[2]}", callback_data=f"winter-edit-prize_{day}|{user_id}"))
-	return keyboards
+		buttons.append([InlineKeyboardButton(text=f"{txt} {tr(i[1])} {i[2]}", callback_data=f"winter-edit-prize_{day}|{user_id}")])
+	return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def edit_prizes_kb(day) -> InlineKeyboardMarkup:
-	keyboards = InlineKeyboardMarkup(row_width=3)
-	buttons = []
-	
+	buttons_row = []
 	for key, item in PRIZES_CONFIG.items():
-		buttons.append(InlineKeyboardButton(item, callback_data=f"winter-set-prize_{day}_{key}"))
-		
-	keyboards.add(*buttons)
-	keyboards.add(InlineKeyboardButton("❌ Отмена", callback_data="winter-dell"))
-	return keyboards
+		buttons_row.append(InlineKeyboardButton(text=item, callback_data=f"winter-set-prize_{day}_{key}"))
+	buttons = [buttons_row[i:i + 3] for i in range(0, len(buttons_row), 3)]
+	buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="winter-dell")])
+	return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 @antispam
@@ -283,14 +281,18 @@ loop.create_task(check())
 
 
 def register_handlers(dp: Dispatcher):
-	dp.register_message_handler(event_calendar_cmd, lambda message: message.text.lower() == 'календарь')
-	dp.register_callback_query_handler(event_calendar_call, text='winter-event-get-prize')
-	dp.register_message_handler(edit_prizes_cmd, commands='wcalendar')
-	dp.register_callback_query_handler(edit_prize_kb, text_startswith='winter-edit-prize_')
-	dp.register_callback_query_handler(edit_summ_kb, text_startswith='winter-set-prize_')
-	dp.register_callback_query_handler(dell_message_kb, text_startswith='winter-dell')
-	dp.register_message_handler(set_summ_cmd, state=SetSummState.summ)
-	edit_event_message()
+    router = Router()
+
+    router.message.register(event_calendar_cmd, F.text.lower() == 'календарь')
+    router.callback_query.register(event_calendar_call, F.data == 'winter-event-get-prize')
+    router.message.register(edit_prizes_cmd, Command('wcalendar'))
+    router.callback_query.register(edit_prize_kb, F.data.startswith('winter-edit-prize_'))
+    router.callback_query.register(edit_summ_kb, F.data.startswith('winter-set-prize_'))
+    router.callback_query.register(dell_message_kb, F.data.startswith('winter-dell'))
+    router.message.register(set_summ_cmd, SetSummState.summ)
+    
+    dp.include_router(router)
+    edit_event_message()
 
 
 MODULE_DESCRIPTION = {
